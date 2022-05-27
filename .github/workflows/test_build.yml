@@ -98,7 +98,7 @@ jobs:
             fi
         
   build_image:
-    name: Deployment
+    name: build_image
     runs-on: ${{ inputs.OS_VERSION }}
     needs: [test]
     if: github.ref == 'refs/heads/main'
