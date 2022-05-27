@@ -16,6 +16,9 @@ on:
       IMAGE_NAME:
         type: string
         required: true
+      VERSION:
+        type: number
+        required: true
     secrets:
       DOCKERHUB_TOKEN:
         required: true
@@ -123,5 +126,5 @@ jobs:
           context: ./productService
           file: ./productService/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ inputs.IMAGE_NAME }}:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ inputs.IMAGE_NAME }}:${{ inputs.VERSION }}.${{ github.run_number }} 
     
