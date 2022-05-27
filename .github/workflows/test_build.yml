@@ -104,7 +104,6 @@ jobs:
     name: build_image
     runs-on: ${{ inputs.OS_VERSION }}
     needs: [test]
-    if: github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: ${{ inputs.WORKING_DIR }}
@@ -120,7 +119,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push
+      - name: Build and push with version Number
+        uses: docker/build-push-action@v2
+        with:
+          context: ${{ inputs.WORKING_DIR }}
+          file: ${{ inputs.WORKING_DIR }}/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ inputs.IMAGE_NAME }}:${{ inputs.VERSION }}.${{ github.run_number }} 
+      - name: Build and push latest
+        if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v2
         with:
           context: ${{ inputs.WORKING_DIR }}
