@@ -32,7 +32,7 @@ jobs:
     runs-on: ${{ inputs.OS_VERSION }}
     defaults:
       run:
-        working-directory: WORKING_DIR
+        working-directory: ${{ inputs.WORKING_DIR }}
     services:
       mongodb:
         image: mongo
@@ -104,7 +104,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     defaults:
       run:
-        working-directory: WORKING_DIR
+        working-directory: ${{ inputs.WORKING_DIR }}
     steps:
       - name: checkout repo
         uses: actions/checkout@v3
