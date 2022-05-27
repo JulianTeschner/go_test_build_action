@@ -1,7 +1,7 @@
 on:
   workflow_call:
     inputs:
-      COVERAGE_PERCANTAGE:
+      COVERAGE_PERCENTAGE:
         type: number
         required: true
       GO_VERSION:
