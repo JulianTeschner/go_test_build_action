@@ -1,36 +1,127 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+  workflow_call:
+    inputs:
+      COVERAGE_PERCANTAGE:
+        type: number
+        required: true
+      GO_VERSION:
+        type: string
+        required: true
+      OS_VERSION:
+        type: string
+        required: true
+      WORKING_DIR:
+        type: string
+        required: true
+      IMAGE_NAME:
+        type: string
+        required: true
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+        
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+  test:
+   # strategy:
+    #  matrix:
+      #  go-version: [${{ inputs.GO_VERSION }}]
+      #  os: [ubuntu-latest, macos-latest, windows-latest]
+       # os: [OS_VERSION]
+    runs-on: ${{ inputs.OS_VERSION }}
+    defaults:
+      run:
+        working-directory: WORKING_DIR
+    services:
+      mongodb:
+        image: mongo
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: root
+          MONGO_INITDB_ROOT_DATABASE: test
+          MONGO_INITDB_TEST_DATABASE: test
+          MONGO_INITDB_ROOT_HOST: 127.0.0.1
+          MONGO_INITDB_ROOT_PORT: 27017
+        options: >-
+          --health-cmd mongo
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017            
+    
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+    - name: checkout
+      uses: actions/checkout@v3
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+        
+    - uses: actions/setup-go@v3
+      with:
+        go-version: ${{ inputs.GO_VERSION }}
+    - name: Run Tests
+      run: |
+        go test ./... -coverprofile coverage.out -covermode count
+        go tool cover -func coverage.out
+      env:
+        MONGO_INITDB_ROOT_USERNAME: root
+        MONGO_INITDB_ROOT_PASSWORD: root
+        MONGO_INITDB_ROOT_DATABASE: test
+        MONGO_INITDB_TEST_DATABASE: test
+        MONGO_INITDB_ROOT_HOST: 127.0.0.1
+        MONGO_INITDB_ROOT_PORT: 27017
+      
+        
+    - name: Quality Gate - Test coverage shall be above threshold
+      env:
+          TESTCOVERAGE_THRESHOLD: ${{ COVERAGE_PERCANTAGE }}
+      run: |
+            echo "Quality Gate: checking test coverage is above threshold ..."
+            echo "Threshold             : $TESTCOVERAGE_THRESHOLD %"
+            totalCoverage=`go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+'`
+            echo "Current test coverage : $totalCoverage %"
+            if (( $(echo "$totalCoverage $TESTCOVERAGE_THRESHOLD" | awk '{print ($1 > $2)}') )); then
+                echo "OK"
+            else
+                echo "Current test coverage is below threshold. Please add more unit tests or adjust threshold to a lower value."
+                echo "Failed"
+                exit 1
+            fi
+        
+  build_image:
+    name: Deployment
+    runs-on: ${{ inputs.OS_VERSION }}
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: WORKING_DIR
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: ./productService
+          file: ./productService/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ inputs.IMAGE_NAME }}:latest
+    
